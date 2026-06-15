@@ -75,7 +75,7 @@
   <div class="ctl"><label>ロゴサイズ <span id="vSize"></span></label><input id="size" type="range" min="0.10" max="0.40" step="0.01" value="0.24"></div>
   <div class="ctl"><label>周回速度（1ループの周回数）<span id="vSpeed"></span></label><input id="speed" type="range" min="1" max="4" step="1" value="1"></div>
   <div class="ctl"><label>ループ長 <span id="vLoop"></span></label><input id="loop" type="range" min="4" max="16" step="1" value="8"></div>
-  <div class="ctl"><label>斜めの角度 <span id="vTilt"></span></label><input id="tilt" type="range" min="15" max="75" step="5" value="45"></div>
+  <div class="ctl"><label>斜めの縦回数（1ループ）<span id="vVsw"></span></label><input id="vsweep" type="range" min="1" max="4" step="1" value="1"></div>
   <div class="ctl"><label>軌道の散らし <span id="vSpread"></span></label><input id="spread" type="range" min="0" max="180" step="10" value="120"></div>
   <div class="ctl"><label>拍動 <span id="vPulse"></span></label><input id="pulse" type="range" min="0" max="0.18" step="0.01" value="0.06"></div>
   <div class="ctl"><label>グロー <span id="vGlow"></span></label><input id="glow" type="range" min="0" max="40" step="1" value="14"></div>
@@ -106,7 +106,7 @@
   var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   var ctx = cv.getContext('2d');
 
-  var state = { size:0.24, speed:1, loop:8, tilt:45, spread:120, pulse:0.06, glow:14, bgspd:0,
+  var state = { size:0.24, speed:1, loop:8, vsweep:1, spread:120, pulse:0.06, glow:14, bgspd:0,
                 dir:1, playing:true, showFlat:false, guide:false, poles:true };
   var bgImg = null, logos = [null, null, null], orbit = ['h', 'v', 'd'];
 
@@ -120,8 +120,7 @@
 
   // ---- great-circle orbit: returns {lon,lat} on unit sphere (Y up = poles) ----
   function orbitPos(type, node, theta) {
-    var inc = type === 'h' ? 0 : type === 'v' ? Math.PI / 2
-            : (type === 'd' ? state.tilt : -state.tilt) * Math.PI / 180;
+    var inc = type === 'v' ? Math.PI / 2 : 0;              // great circle: h=equator, v=over poles
     var x = Math.sin(theta), z = Math.cos(theta);          // equatorial base point
     var y1 = -z * Math.sin(inc), z1 = z * Math.cos(inc), x1 = x;   // incline about X
     var xr = x1 * Math.cos(node) + z1 * Math.sin(node);    // rotate plane about Y
@@ -129,14 +128,15 @@
     return { lon: Math.atan2(xr, zr), lat: Math.asin(Math.max(-1, Math.min(1, y1))) };
   }
 
-  // draw a logo at lon/lat with pole-distortion compensation (horizontal pre-warp)
-  function drawLogoLL(img, lon, lat, baseH) {
-    var u = (0.5 + lon / TAU); u = (u % 1 + 1) % 1;
+  // draw a logo at fractional longitude u (0..1) and latitude lat, with pole-distortion compensation
+  function drawLogoU(img, u, lat, baseH) {
+    u = (u % 1 + 1) % 1;
     var xpx = u * W, ypx = (0.5 - lat / Math.PI) * H;
     var warp = 1 / Math.max(Math.cos(lat), 1 / MAXWARP);
     var h = baseH, w = baseH * img.width / img.height * warp;
     for (var dx = -W; dx <= W; dx += W) ctx.drawImage(img, xpx + dx - w / 2, ypx - h / 2, w, h);
   }
+  function drawLogoLL(img, lon, lat, baseH) { drawLogoU(img, 0.5 + lon / TAU, lat, baseH); }
 
   function present() { var a = []; for (var i = 0; i < 3; i++) if (logos[i]) a.push(i); return a; }
 
@@ -150,13 +150,24 @@
     var pr = present(), n = pr.length, spreadRad = state.spread * Math.PI / 180;
     ctx.save();
     for (var k = 0; k < n; k++) {
-      var i = pr[k], img = logos[i];
-      var node = (n > 1 ? k / n : 0) * spreadRad;
-      var theta = TAU * ((p * state.dir * state.speed) + (n > 1 ? k / n : 0));
-      var pos = orbitPos(orbit[i], node, theta);
+      var i = pr[k], img = logos[i], type = orbit[i];
+      var phase = n > 1 ? k / n : 0;
       var sc = 1 + state.pulse * Math.sin(TAU * (2 * p) + k * 1.7);
+      var baseH = state.size * H * sc;
       ctx.shadowColor = 'rgba(255,210,120,0.9)'; ctx.shadowBlur = state.glow;
-      drawLogoLL(img, pos.lon, pos.lat, state.size * H * sc);
+      if (type === 'd' || type === 'd2') {
+        // diagonal scroll: wraps horizontally AND vertically (top limit -> reappears from bottom)
+        var u = phase + p * state.dir * state.speed;
+        var vsign = type === 'd' ? -1 : 1;                 // d:↗ climbs (exits top, enters bottom)
+        var latFrac = ((phase + p * state.vsweep * vsign) % 1 + 1) % 1;
+        var lat = (0.5 - latFrac) * Math.PI;               // +90°(top) .. -90°(bottom), wraps around
+        drawLogoU(img, u, lat, baseH);
+      } else {
+        var node = phase * spreadRad;
+        var theta = TAU * ((p * state.dir * state.speed) + phase);
+        var pos = orbitPos(type, node, theta);
+        drawLogoLL(img, pos.lon, pos.lat, baseH);
+      }
     }
     ctx.restore(); ctx.shadowBlur = 0;
 
@@ -244,7 +255,7 @@
   bind('size', 'size', 'vSize', function (v) { return Math.round(v * 100) + '%'; });
   bind('speed', 'speed', 'vSpeed', function (v) { return v + ' 周/ループ'; });
   bind('loop', 'loop', 'vLoop', function (v) { return v + ' 秒'; });
-  bind('tilt', 'tilt', 'vTilt', function (v) { return v + '°'; });
+  bind('vsweep', 'vsweep', 'vVsw', function (v) { return v + ' 回'; });
   bind('spread', 'spread', 'vSpread', function (v) { return v + '°'; });
   bind('pulse', 'pulse', 'vPulse', function (v) { return Math.round(v * 100) + '%'; });
   bind('glow', 'glow', 'vGlow', function (v) { return v + ' px'; });

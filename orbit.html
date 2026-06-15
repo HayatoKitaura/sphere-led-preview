@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sphere Orbit Maker — 球体LED 衛星周回ジェネレーター</title>
+<style>
+  :root { --accent:#e33; }
+  html,body { margin:0; height:100%; background:#050505; overflow:hidden;
+    font-family:"Hiragino Sans","Noto Sans JP",sans-serif; color:#ddd; }
+  #app { position:fixed; inset:0; }
+  #flatWrap { position:fixed; inset:0; display:none; place-items:center; background:#000; z-index:1; }
+  #flat { max-width:96vw; max-height:92vh; box-shadow:0 0 0 1px #333; }
+  .card { background:rgba(12,12,12,.86); border:1px solid #333; border-radius:10px; backdrop-filter:blur(6px); }
+  #panel { position:fixed; top:14px; left:14px; z-index:10; padding:13px 14px; width:300px;
+    max-height:calc(100vh - 28px); overflow:auto; }
+  #panel h1 { font-size:13px; margin:0 0 2px; letter-spacing:.06em; color:#fff; }
+  #panel .sub { font-size:10.5px; color:#888; margin-bottom:10px; }
+  .loadgrid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px; }
+  label.btn { display:block; text-align:center; cursor:pointer; background:#222; color:#ccc;
+    border:1px solid #444; border-radius:6px; padding:7px 0; font-size:11.5px; }
+  label.btn:hover { border-color:#777; }
+  label.btn.bg { grid-column:1 / -1; background:var(--accent); color:#fff; border:none; font-weight:600; }
+  label.btn.set { background:#1b3a1b; border-color:#2a5a2a; color:#cfc; }
+  .ctl { margin:7px 0; }
+  .ctl label { display:block; font-size:11px; color:#aaa; margin-bottom:3px; display:flex; justify-content:space-between; }
+  .ctl label span { color:#fff; }
+  input[type=range] { width:100%; }
+  input[type=file] { display:none; }
+  .row { display:flex; gap:6px; margin:8px 0; }
+  .row button { flex:1; background:#222; color:#ccc; border:1px solid #444; border-radius:6px; padding:7px 0; font-size:12px; cursor:pointer; }
+  .row button:hover { border-color:#777; } .row button.on { background:#444; color:#fff; border-color:#888; }
+  #export { background:var(--accent); color:#fff; border:none; font-weight:600; }
+  #status { font-size:11px; color:#9b9; margin-top:8px; min-height:1.4em; line-height:1.5; }
+  #status.rec { color:#f77; }
+  .divider { height:1px; background:#2a2a2a; margin:10px 0; }
+  #err { position:fixed; inset:0; display:none; place-items:center; z-index:20; background:#100; color:#f99; font-size:14px; padding:40px; text-align:center; line-height:1.8; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="flatWrap"><canvas id="flatView"></canvas></div>
+
+<div id="panel" class="card">
+  <h1>SPHERE ORBIT MAKER</h1>
+  <div class="sub">球体LED 1920×992 ／ ロゴ衛星周回ジェネレーター</div>
+
+  <div class="loadgrid">
+    <label class="btn bg" for="fBg">背景を読み込む（任意）</label>
+    <label class="btn" for="f0" id="l0">ロゴ 1</label>
+    <label class="btn" for="f1" id="l1">ロゴ 2</label>
+    <label class="btn" for="f2" id="l2">ロゴ 3</label>
+    <div></div>
+  </div>
+  <input id="fBg" type="file" accept="image/*">
+  <input id="f0" type="file" accept="image/*">
+  <input id="f1" type="file" accept="image/*">
+  <input id="f2" type="file" accept="image/*">
+
+  <div class="divider"></div>
+
+  <div class="ctl"><label>ロゴサイズ <span id="vSize"></span></label><input id="size" type="range" min="0.12" max="0.45" step="0.01" value="0.26"></div>
+  <div class="ctl"><label>周回速度（1ループの周回数）<span id="vSpeed"></span></label><input id="speed" type="range" min="1" max="4" step="1" value="1"></div>
+  <div class="ctl"><label>ループ長 <span id="vLoop"></span></label><input id="loop" type="range" min="4" max="16" step="1" value="8"></div>
+  <div class="ctl"><label>縦の揺れ <span id="vBob"></span></label><input id="bob" type="range" min="0" max="60" step="1" value="18"></div>
+  <div class="ctl"><label>拍動 <span id="vPulse"></span></label><input id="pulse" type="range" min="0" max="0.18" step="0.01" value="0.06"></div>
+  <div class="ctl"><label>グロー <span id="vGlow"></span></label><input id="glow" type="range" min="0" max="40" step="1" value="14"></div>
+  <div class="ctl"><label>縦のばらつき <span id="vStag"></span></label><input id="stag" type="range" min="0" max="180" step="2" value="60"></div>
+  <div class="ctl"><label>背景の流れ <span id="vBg"></span></label><input id="bgspd" type="range" min="-2" max="2" step="1" value="0"></div>
+
+  <div class="row">
+    <button id="play" class="on">再生中</button>
+    <button id="dir" class="on">右回り</button>
+  </div>
+  <div class="row">
+    <button id="view">表示：球</button>
+    <button id="guide">ガイド</button>
+    <button id="poles" class="on">極を暗く</button>
+  </div>
+  <div class="row"><button id="export">WebMで書き出し</button></div>
+  <div id="status">ロゴと背景を読み込んでください</div>
+</div>
+
+<button id="dummy" style="display:none"></button>
+<div id="err">three.js を読み込めませんでした。<b>vendor</b> フォルダを同じ場所に置いてください。</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script>
+(function () {
+  if (typeof THREE === 'undefined') { document.getElementById('err').style.display = 'grid'; return; }
+  var W = 1920, H = 992, EQ = H / 2;
+
+  // ---- offscreen 2D canvas = equirectangular content (export source) ----
+  var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  var ctx = cv.getContext('2d');
+
+  var state = { size:0.26, speed:1, loop:8, bob:18, pulse:0.06, glow:14, stag:60, bgspd:0,
+                dir:1, playing:true, showFlat:false, guide:false, poles:true };
+  var bgImg = null, logos = [null, null, null];
+
+  // ---- drawing helpers ----
+  function drawCover(img, shift) {
+    var s = Math.max(W / img.width, H / img.height);
+    var w = img.width * s, h = img.height * s;
+    var x0 = (W - w) / 2 + shift, y0 = (H - h) / 2;
+    for (var dx = -W; dx <= W; dx += W) ctx.drawImage(img, x0 + dx, y0, w, h);
+  }
+  function drawLogo(img, xc, yc, h) {
+    var w = h * img.width / img.height;
+    for (var dx = -W; dx <= W; dx += W) ctx.drawImage(img, xc + dx - w / 2, yc - h / 2, w, h);
+  }
+  function present() { var a = []; for (var i = 0; i < 3; i++) if (logos[i]) a.push(i); return a; }
+
+  function render(p) {
+    // background
+    ctx.clearRect(0, 0, W, H);
+    if (bgImg) drawCover(bgImg, ((p * state.bgspd) % 1) * W);
+    else { var g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#050507'); g.addColorStop(0.5, '#1a0a12'); g.addColorStop(1, '#050507');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+
+    // logos as orbiting satellites
+    var pr = present(), n = pr.length;
+    var bobCycles = 2, pulseCycles = 2;
+    ctx.save();
+    for (var k = 0; k < n; k++) {
+      var i = pr[k], img = logos[i];
+      var phase = k / n;
+      var x = (((p * state.dir * state.speed) + phase) % 1 + 1) % 1 * W;
+      var lat = EQ + (k - (n - 1) / 2) * state.stag;
+      var y = lat + state.bob * Math.sin(2 * Math.PI * (bobCycles * p) + k * 2.1);
+      var sc = 1 + state.pulse * Math.sin(2 * Math.PI * (pulseCycles * p) + k * 1.7);
+      var h = state.size * H * sc;
+      ctx.shadowColor = 'rgba(255,210,120,0.9)';
+      ctx.shadowBlur = state.glow;
+      drawLogo(img, x, y, h);
+    }
+    ctx.restore();
+    ctx.shadowBlur = 0;
+
+    // darken poles
+    if (state.poles) {
+      var top = ctx.createLinearGradient(0, 0, 0, H * 0.28);
+      top.addColorStop(0, 'rgba(0,0,0,0.85)'); top.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = top; ctx.fillRect(0, 0, W, H * 0.28);
+      var bot = ctx.createLinearGradient(0, H, 0, H * 0.72);
+      bot.addColorStop(0, 'rgba(0,0,0,0.85)'); bot.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = bot; ctx.fillRect(0, H * 0.72, W, H * 0.28);
+    }
+
+    // guide overlay (not exported)
+    if (state.guide && !recording) {
+      ctx.strokeStyle = 'rgba(85,119,204,0.7)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(0, EQ); ctx.lineTo(W, EQ); ctx.stroke();
+      ctx.strokeStyle = 'rgba(204,51,51,0.8)';
+      ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.setLineDash([14, 14]);
+      ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(2, H); ctx.moveTo(W - 2, 0); ctx.lineTo(W - 2, H); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = '34px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('FRONT', W / 2, 44); ctx.fillText('BACK 継ぎ目', 150, EQ - 16); ctx.fillText('BACK 継ぎ目', W - 150, EQ - 16);
+    }
+    tex.needsUpdate = true;
+    if (state.showFlat) { fctx.clearRect(0, 0, fv.width, fv.height); fctx.drawImage(cv, 0, 0, fv.width, fv.height); }
+  }
+
+  // ---- three.js sphere ----
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.getElementById('app').appendChild(renderer.domElement);
+  var scene = new THREE.Scene(); scene.background = new THREE.Color(0x050505);
+  var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(0, 0.4, 3.4);
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.minDistance = 1.4; controls.maxDistance = 8;
+  var tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding;
+  var sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), new THREE.MeshBasicMaterial({ map: tex }));
+  sphere.rotation.y = -Math.PI / 2; scene.add(sphere);
+  var floor = new THREE.Mesh(new THREE.CircleGeometry(2.2, 64),
+    new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.6 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -1.35; scene.add(floor);
+
+  // ---- flat view ----
+  var fv = document.getElementById('flatView'); fv.width = W; fv.height = H;
+  var fctx = fv.getContext('2d');
+
+  // ---- clock ----
+  var p = 0, last = performance.now(), recording = false, recStart = 0;
+  function tick(now) {
+    var dt = (now - last) / 1000; last = now;
+    if (recording) { p = (now - recStart) / 1000 / state.loop; if (p >= 1) { p = 0.9999; finishRecord(); } }
+    else if (state.playing) { p = (p + dt / state.loop) % 1; }
+    render(p);
+    controls.update();
+    if (!state.showFlat) renderer.render(scene, camera);
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // ---- file loading ----
+  function loadFile(file, cb) { var img = new Image(); img.onload = function () { cb(img); }; img.src = URL.createObjectURL(file); }
+  function setLogoBtn(i) { var el = document.getElementById('l' + i); el.classList.toggle('set', !!logos[i]); el.textContent = logos[i] ? '✓ ロゴ ' + (i + 1) : 'ロゴ ' + (i + 1); updateStatus(); }
+  function updateStatus() {
+    var n = present().length;
+    status.textContent = (bgImg ? '背景○ ' : '背景：デフォルト ') + 'ロゴ ' + n + '枚' + (n ? ' — 周回中' : '（未読込）');
+  }
+  [0,1,2].forEach(function (i) {
+    document.getElementById('f' + i).addEventListener('change', function (e) {
+      if (e.target.files[0]) loadFile(e.target.files[0], function (img) { logos[i] = img; setLogoBtn(i); });
+    });
+  });
+  document.getElementById('fBg').addEventListener('change', function (e) {
+    if (e.target.files[0]) loadFile(e.target.files[0], function (img) { bgImg = img; updateStatus(); });
+  });
+  // test/utility hooks
+  window.__loadLogoURL = function (i, url) { var im = new Image(); im.crossOrigin = 'anonymous'; im.onload = function(){ logos[i] = im; setLogoBtn(i); }; im.src = url; };
+  window.__loadBgURL = function (url) { var im = new Image(); im.crossOrigin = 'anonymous'; im.onload = function(){ bgImg = im; updateStatus(); }; im.src = url; };
+
+  // ---- sliders ----
+  function bind(id, key, fmt) {
+    var el = document.getElementById(id), out = document.getElementById('v' + id.charAt(0).toUpperCase() + id.slice(1));
+    function up() { state[key] = parseFloat(el.value); if (out) out.textContent = fmt ? fmt(state[key]) : state[key]; }
+    el.addEventListener('input', up); up();
+  }
+  bind('size', 'size', function (v) { return Math.round(v * 100) + '%'; });
+  bind('speed', 'speed', function (v) { return v + ' 周/ループ'; });
+  bind('loop', 'loop', function (v) { return v + ' 秒'; });
+  bind('bob', 'bob', function (v) { return v + ' px'; });
+  bind('pulse', 'pulse', function (v) { return Math.round(v * 100) + '%'; });
+  bind('glow', 'glow', function (v) { return v + ' px'; });
+  bind('stag', 'stag', function (v) { return v + ' px'; });
+  document.getElementById('bgspd').addEventListener('input', function (e) { state.bgspd = parseInt(e.target.value); document.getElementById('vBg').textContent = state.bgspd; });
+  document.getElementById('vBg').textContent = 0;
+
+  // ---- toggles ----
+  var status = document.getElementById('status');
+  var playBtn = document.getElementById('play');
+  playBtn.addEventListener('click', function () { state.playing = !state.playing; playBtn.classList.toggle('on', state.playing); playBtn.textContent = state.playing ? '再生中' : '停止中'; });
+  var dirBtn = document.getElementById('dir');
+  dirBtn.addEventListener('click', function () { state.dir *= -1; var r = state.dir > 0; dirBtn.classList.toggle('on', r); dirBtn.textContent = r ? '右回り' : '左回り'; });
+  var viewBtn = document.getElementById('view'), flatWrap = document.getElementById('flatWrap');
+  viewBtn.addEventListener('click', function () { state.showFlat = !state.showFlat; flatWrap.style.display = state.showFlat ? 'grid' : 'none'; viewBtn.textContent = state.showFlat ? '表示：平面' : '表示：球'; });
+  var guideBtn = document.getElementById('guide');
+  guideBtn.addEventListener('click', function () { state.guide = !state.guide; guideBtn.classList.toggle('on', state.guide); });
+  var polesBtn = document.getElementById('poles');
+  polesBtn.addEventListener('click', function () { state.poles = !state.poles; polesBtn.classList.toggle('on', state.poles); });
+
+  // ---- export (WebM) ----
+  var rec = null, chunks = [];
+  function pickMime() { var c = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+    for (var i = 0; i < c.length; i++) if (window.MediaRecorder && MediaRecorder.isTypeSupported(c[i])) return c[i]; return ''; }
+  document.getElementById('export').addEventListener('click', function () {
+    if (recording) return;
+    if (!present().length) { status.textContent = '先にロゴを読み込んでください'; return; }
+    var mime = pickMime();
+    if (!mime) { status.textContent = 'この環境はWebM書き出し非対応です'; return; }
+    var stream = cv.captureStream(30);
+    rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12000000 });
+    chunks = []; rec.ondataavailable = function (e) { if (e.data.size) chunks.push(e.data); };
+    rec.onstop = function () {
+      var blob = new Blob(chunks, { type: 'video/webm' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = 'sphere-orbit_1920x992_' + state.loop + 's.webm'; a.click();
+      status.textContent = '書き出し完了（WebM）。納品はMP4/H.264へ変換してください'; status.classList.remove('rec');
+    };
+    recording = true; recStart = performance.now(); p = 0;
+    status.textContent = '● 録画中… ' + state.loop + '秒（1ループ）'; status.classList.add('rec');
+    rec.start();
+  });
+  function finishRecord() { recording = false; if (rec && rec.state !== 'inactive') rec.stop(); last = performance.now(); }
+
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+  updateStatus();
+})();
+</script>
+</body>
+</html>

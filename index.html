@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VJ Sphere Preview — 球体LED (1920×992)</title>
+<style>
+  :root { --accent:#e33; }
+  html, body { margin:0; height:100%; background:#050505; overflow:hidden;
+    font-family:"Hiragino Sans","Noto Sans JP",sans-serif; color:#ddd; }
+  #app { position:fixed; inset:0; }
+  .card { background:rgba(12,12,12,.84); border:1px solid #333; border-radius:10px;
+    backdrop-filter:blur(6px); }
+  #panel { position:fixed; top:16px; left:16px; z-index:10; padding:14px 16px; width:286px; }
+  #panel h1 { font-size:14px; margin:0 0 2px; letter-spacing:.08em; color:#fff; }
+  #panel .sub { font-size:11px; color:#888; margin-bottom:10px; }
+  label.btn { display:block; text-align:center; cursor:pointer; background:var(--accent);
+    color:#fff; border-radius:6px; padding:9px 0; font-size:13px; margin-bottom:8px; font-weight:600; }
+  label.btn:hover { background:#f44; }
+  .hint { font-size:11px; color:#999; margin-bottom:10px; line-height:1.6; }
+  .row { display:flex; gap:6px; margin-bottom:6px; }
+  .row button { flex:1; background:#222; color:#ccc; border:1px solid #444; border-radius:6px;
+    padding:6px 0; font-size:12px; cursor:pointer; }
+  .row button:hover { border-color:#777; }
+  .row button.on { background:#444; color:#fff; border-color:#888; }
+  #info { font-size:11px; color:#aaa; margin-top:8px; line-height:1.6; min-height:2.4em; }
+  #info .warn { color:#fa5; } #info .ok { color:#6d6; }
+  input[type=file] { display:none; }
+  #help { position:fixed; top:16px; right:16px; z-index:10; padding:14px 16px; width:300px;
+    font-size:11.5px; line-height:1.7; color:#bbb; display:none; }
+  #help.show { display:block; }
+  #help h2 { font-size:12px; color:#fff; margin:0 0 6px; }
+  #help b { color:#e88; }
+  #help .sec { margin-bottom:8px; }
+  #helpToggle { position:fixed; top:16px; right:16px; z-index:11; width:30px; height:30px;
+    border-radius:50%; background:#222; border:1px solid #555; color:#ccc; cursor:pointer; font-size:14px; }
+  #err { position:fixed; inset:0; display:none; place-items:center; z-index:20;
+    background:#100; color:#f99; font-size:14px; padding:40px; text-align:center; line-height:1.8; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="panel" class="card">
+  <h1>VJ SPHERE PREVIEW</h1>
+  <div class="sub">球体LED ／ φ1500mm ／ 1920×992px</div>
+  <label class="btn" for="file">動画 / 画像を読み込む</label>
+  <input id="file" type="file" accept="video/*,image/*">
+  <div class="hint">画面へのドラッグ＆ドロップでもOK。中央＝正面、左右端＝背面で接合します。</div>
+  <div class="row">
+    <button id="rot" class="on">自動回転</button>
+    <button id="grid" class="on">ガイド</button>
+  </div>
+  <div class="row">
+    <button data-view="front">正面</button>
+    <button data-view="side">横</button>
+    <button data-view="top">俯瞰</button>
+    <button data-view="reset">リセット</button>
+  </div>
+  <div class="row">
+    <button id="shot">画像を保存</button>
+    <button id="full">全画面</button>
+  </div>
+  <div id="info">ファイル未読み込み（ガイド表示中）</div>
+</div>
+
+<button id="helpToggle" title="使い方">?</button>
+<div id="help" class="card">
+  <h2>使い方</h2>
+  <div class="sec"><b>① 読み込む</b><br>「動画 / 画像を読み込む」を押すか、ファイルを画面にドラッグ＆ドロップ。</div>
+  <div class="sec"><b>② 見る</b><br>マウスドラッグで回転、ホイールでズーム。視点プリセット（正面/横/俯瞰）も使えます。</div>
+  <div class="sec"><b>③ 確認ポイント</b><br>・文字やロゴは<b>赤道付近の帯</b>に置く<br>・上下20%（極）は歪むので抽象柄だけ<br>・左端と右端は<b>背面でつながる</b>ので継ぎ目を合わせる<br>・実機解像度は<b>1920×992px</b></div>
+  <div class="sec" style="color:#888">素材を差し替えながら見え方を比較してください。「画像を保存」で今の見えをPNG書き出しできます。</div>
+</div>
+
+<div id="err">
+  three.js を読み込めませんでした。<br>
+  この HTML と同じ場所にある <b>vendor</b> フォルダごと移動・コピーしてください。<br>
+  （HTML 単体では動きません）
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script>
+(function () {
+  if (typeof THREE === 'undefined') { document.getElementById('err').style.display = 'grid'; return; }
+  var W = 1920, H = 992;
+
+  // ---- guide texture ----
+  function makeGuideCanvas() {
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    var g = c.getContext('2d');
+    g.fillStyle = '#101018'; g.fillRect(0, 0, W, H);
+    g.fillStyle = 'rgba(255,80,40,0.12)';
+    g.fillRect(0, 0, W, H * 0.2); g.fillRect(0, H * 0.8, W, H * 0.2);
+    g.strokeStyle = '#2e3a55'; g.lineWidth = 2;
+    for (var i = 0; i <= 24; i++) { var x = W * i / 24; g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+    for (var j = 0; j <= 12; j++) { var y = H * j / 12; g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+    g.strokeStyle = '#5577cc'; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke();
+    g.strokeStyle = '#cc3333';
+    g.beginPath(); g.moveTo(W / 2, 0); g.lineTo(W / 2, H); g.stroke();
+    g.fillStyle = '#fff'; g.textAlign = 'center';
+    g.font = 'bold 90px sans-serif'; g.fillText('FRONT', W / 2, H / 2 - 40);
+    g.font = 'bold 48px sans-serif'; g.fillStyle = '#ccc';
+    g.fillText('← BACK (継ぎ目)', 240, H / 2 + 80);
+    g.fillText('BACK (継ぎ目) →', W - 240, H / 2 + 80);
+    g.fillStyle = '#f96'; g.font = 'bold 40px sans-serif';
+    g.fillText('極：歪み大・重要要素を置かない', W / 2, H * 0.1 + 14);
+    g.fillText('極：歪み大・重要要素を置かない', W / 2, H * 0.9 + 14);
+    return c;
+  }
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.getElementById('app').appendChild(renderer.domElement);
+
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x050505);
+  var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(0, 0.5, 3.4);
+
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.minDistance = 1.4; controls.maxDistance = 8;
+
+  var guideTex = new THREE.CanvasTexture(makeGuideCanvas());
+  guideTex.encoding = THREE.sRGBEncoding;
+  var mediaTex = null;
+
+  var sphere = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 96, 64),
+    new THREE.MeshBasicMaterial({ map: guideTex })
+  );
+  sphere.rotation.y = -Math.PI / 2; // texture u=0.5 -> front
+  scene.add(sphere);
+
+  var floor = new THREE.Mesh(
+    new THREE.CircleGeometry(2.2, 64),
+    new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.6 })
+  );
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -1.35; scene.add(floor);
+
+  // ---- media loading ----
+  var info = document.getElementById('info');
+  var gridBtn = document.getElementById('grid');
+  var videoEl = null;
+
+  function setMedia(file) {
+    if (videoEl) { videoEl.pause(); videoEl.src = ''; videoEl = null; }
+    var url = URL.createObjectURL(file);
+    function apply(tex, w, h) {
+      tex.encoding = THREE.sRGBEncoding;
+      mediaTex = tex;
+      sphere.material.map = tex; sphere.material.needsUpdate = true;
+      gridBtn.classList.remove('on');
+      var ok = (w === W && h === H);
+      info.innerHTML = file.name + '<br>' + w + '×' + h + 'px ' + (ok
+        ? '<span class="ok">✔ 実機解像度と一致</span>'
+        : '<span class="warn">⚠ 実機は ' + W + '×' + H + 'px（全面に伸ばして表示中）</span>');
+    }
+    if (file.type.indexOf('video') === 0) {
+      videoEl = document.createElement('video');
+      videoEl.src = url; videoEl.loop = true; videoEl.muted = true; videoEl.playsInline = true;
+      videoEl.addEventListener('loadeddata', function () {
+        videoEl.play();
+        apply(new THREE.VideoTexture(videoEl), videoEl.videoWidth, videoEl.videoHeight);
+      });
+    } else {
+      new THREE.TextureLoader().load(url, function (tex) {
+        apply(tex, tex.image.width, tex.image.height);
+      });
+    }
+  }
+
+  document.getElementById('file').addEventListener('change', function (e) {
+    if (e.target.files[0]) setMedia(e.target.files[0]);
+  });
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) {
+    e.preventDefault();
+    if (e.dataTransfer.files[0]) setMedia(e.dataTransfer.files[0]);
+  });
+
+  // ---- toggles ----
+  var rotBtn = document.getElementById('rot');
+  var autoRotate = true;
+  rotBtn.addEventListener('click', function () { autoRotate = !autoRotate; rotBtn.classList.toggle('on', autoRotate); });
+  gridBtn.addEventListener('click', function () {
+    var showGuide = sphere.material.map !== guideTex;
+    sphere.material.map = showGuide ? guideTex : (mediaTex || guideTex);
+    sphere.material.needsUpdate = true;
+    gridBtn.classList.toggle('on', sphere.material.map === guideTex);
+  });
+
+  // ---- view presets ----
+  var views = { front:[0,0.3,3.4], side:[3.2,0.3,0.6], top:[0,3.2,0.8], reset:[0,0.5,3.4] };
+  Array.prototype.forEach.call(document.querySelectorAll('[data-view]'), function (b) {
+    b.addEventListener('click', function () {
+      var v = views[b.getAttribute('data-view')];
+      camera.position.set(v[0], v[1], v[2]); controls.target.set(0, 0, 0); controls.update();
+    });
+  });
+
+  // ---- screenshot ----
+  document.getElementById('shot').addEventListener('click', function () {
+    renderer.render(scene, camera);
+    var a = document.createElement('a');
+    a.download = 'sphere-preview.png';
+    a.href = renderer.domElement.toDataURL('image/png');
+    a.click();
+  });
+
+  // ---- fullscreen ----
+  document.getElementById('full').addEventListener('click', function () {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  });
+
+  // ---- help ----
+  var help = document.getElementById('help');
+  document.getElementById('helpToggle').addEventListener('click', function () { help.classList.toggle('show'); });
+
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  renderer.setAnimationLoop(function () {
+    if (autoRotate) sphere.rotation.y += 0.0025;
+    controls.update();
+    renderer.render(scene, camera);
+  });
+})();
+</script>
+</body>
+</html>

@@ -83,6 +83,7 @@
     <option value="grid">ネオングリッド</option>
     <option value="radial">放射パルス</option>
     <option value="tunnel">トンネル</option>
+    <option value="noir">ノワール（漆黒・微光スイープ）</option>
     <option value="none">なし（黒）</option>
   </select>
 
@@ -135,7 +136,7 @@
   (function () { var nc = noise.getContext('2d'), id = nc.createImageData(256, 256), d = id.data;
     for (var i = 0; i < d.length; i += 4) { var v = (160 + Math.random() * 95) | 0; d[i] = d[i+1] = d[i+2] = v; d[i+3] = 255; } nc.putImageData(id, 0, 0); })();
 
-  var ORBITS = [['h','横（赤道）'],['v','縦（極を通る）'],['d','斜め ↗'],['d2','斜め ↘'],['ring','リング（緯度違い）'],['helix','螺旋'],['fig8','8の字'],['wave','波打ち']];
+  var ORBITS = [['h','横（赤道）'],['v','縦（極を通る）'],['d','斜め ↗'],['d2','斜め ↘'],['ring','リング（緯度違い）'],['helix','螺旋'],['fig8','8の字'],['wave','波打ち'],['center','中央（静止/微動）']];
 
   var state = { size:0.22, speed:1, loop:8, vsweep:1, spread:120, pulse:0.06, bloom:26, trail:6,
     cycle:0, strobe:0, bgspd:2, grain:0.05, bg:'embers', accent:'#ee3333',
@@ -175,7 +176,12 @@
     for(var k=0;k<6;k++){ var f=(((p*2 + k/6)%1)+1)%1; c.strokeStyle=aRGBA((1-f)*0.7); c.beginPath(); c.arc(0,0,f*W*0.6,0,TAU); c.stroke(); } c.restore(); }
   function bgTunnel(c,p){ c.save(); c.globalCompositeOperation='lighter'; c.translate(W/2,H/2); c.lineWidth=4;
     for(var k=0;k<10;k++){ var f=(((-p*2 + k/10)%1)+1)%1; c.strokeStyle=aRGBA(f*0.6); c.beginPath(); c.arc(0,0,f*W*0.65+10,0,TAU); c.stroke(); } c.restore(); }
-  function drawBgGlow(c,p){ switch(state.bg){ case 'droprain': bgDrop(c,p); break; case 'starfield': bgStars(c,p); break; case 'grid': bgGrid(c,p); break; case 'radial': bgRadial(c,p); break; case 'tunnel': bgTunnel(c,p); break; case 'none': break; default: bgEmbers(c,p); } }
+  function bgNoir(c,p){ c.save(); c.globalCompositeOperation='lighter';
+    var br=0.05+0.035*(0.5+0.5*Math.sin(TAU*p)); softDot(c,W*0.5,H*0.5,H*1.0,aRGBA(br));
+    var cx=-W*0.4 + p*W*1.8, bw=260; var g=c.createLinearGradient(cx-bw,0,cx+bw,0);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(0.5,aRGBA(0.12)); g.addColorStop(1,'rgba(0,0,0,0)');
+    c.fillStyle=g; c.fillRect(cx-bw,0,bw*2,H); c.restore(); }
+  function drawBgGlow(c,p){ switch(state.bg){ case 'noir': bgNoir(c,p); break; case 'droprain': bgDrop(c,p); break; case 'starfield': bgStars(c,p); break; case 'grid': bgGrid(c,p); break; case 'radial': bgRadial(c,p); break; case 'tunnel': bgTunnel(c,p); break; case 'none': break; default: bgEmbers(c,p); } }
 
   // ---- orbits ----
   function orbitPos(type,node,theta){ var inc=type==='v'?Math.PI/2:0; var x=Math.sin(theta),z=Math.cos(theta);
@@ -188,6 +194,7 @@
     if(type==='helix'){ return {u:phase+p*s,lat:Math.sin(TAU*(p*state.vsweep+phase))*Math.PI*0.45}; }
     if(type==='fig8'){ var a=TAU*(p*s+phase); return {u:0.5+Math.sin(a)*0.5,lat:Math.sin(2*a)*Math.PI*0.4}; }
     if(type==='wave'){ var uu=phase+p*s; return {u:uu,lat:Math.sin(TAU*(uu*2))*Math.PI*0.18}; }
+    if(type==='center'){ var a=TAU*(p*s+phase); return {u:0.5+0.045*Math.sin(a), lat:0.06*Math.sin(a*0.5+1)}; }
     return {u:0.5,lat:0}; }
   function drawLogoOn(c,img,u,lat,baseH,alpha){ u=(u%1+1)%1; var xpx=u*W, ypx=(0.5-lat/Math.PI)*H, warp=1/Math.max(Math.cos(lat),1/MAXWARP);
     var h=baseH, w=baseH*img.width/img.height*warp; c.globalAlpha=alpha;
@@ -321,7 +328,8 @@
     'KALEIDO':     { bg:'tunnel',  accent:'#ff4455', bloom:30, trail:6, mirror:true,  cycle:1, strobe:0, vignette:true, grain:0.05, orbit:['helix','fig8','wave'],speed:2, pulse:0.06, bgspd:2, size:0.22 },
     'NEON GRID':   { bg:'grid',    accent:'#ff2266', bloom:24, trail:4, mirror:false, cycle:0, strobe:0, vignette:true, grain:0.05, orbit:['wave','h','ring'],speed:1, pulse:0.05, bgspd:2, size:0.22 },
     'STARFIELD':   { bg:'starfield',accent:'#ffffff',bloom:22, trail:2, mirror:false, cycle:0, strobe:0, vignette:true, grain:0.04, orbit:['h','v','d'],      speed:1, pulse:0.05, bgspd:2, size:0.22 },
-    'MINIMAL':     { bg:'embers',  accent:'#ee3333', bloom:18, trail:2, mirror:false, cycle:0, strobe:0, vignette:false,grain:0.03, orbit:['h','v','d'],      speed:1, pulse:0.04, bgspd:1, size:0.22 }
+    'MINIMAL':     { bg:'embers',  accent:'#ee3333', bloom:18, trail:2, mirror:false, cycle:0, strobe:0, vignette:false,grain:0.03, orbit:['h','v','d'],      speed:1, pulse:0.04, bgspd:1, size:0.22 },
+    'NOIR ◆洗練':  { bg:'noir',    accent:'#a8121e', bloom:13, trail:0, mirror:false, cycle:0, strobe:0, vignette:true, grain:0.045,orbit:['center','center','center'], speed:1, pulse:0.03, bgspd:1, size:0.28 }
   };
   function syncUI(){ Object.keys(SLID).forEach(function(key){ var el=document.getElementById(key); if(el){ el.value=state[key]; document.getElementById(SLID[key]).textContent=FMT[key](state[key]); } });
     document.getElementById('bg').value=state.bg; document.getElementById('accent').value=state.accent; document.documentElement.style.setProperty('--accent',state.accent);

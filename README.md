@@ -14,7 +14,20 @@
 - 左端と右端は背面でつながるので継ぎ目を合わせる
 
 ## 構成
-- `index.html` — 本体
+- `index.html` — 静止プレビュー＋1920×992テンプレDL
+- `orbit.html` — **Sphere Orbit Maker**（ロゴ衛星周回・WebM書き出し）
+- `vj.html` — **Sphere VJ Studio**（強化版。下記）
 - `vendor/` — three.js (r137) と OrbitControls。同梱なのでオフラインでも動作
+
+## vj.html（Sphere VJ Studio）
+VJレベルのパターン生成。`orbit.html` の上位版。
+- **プリセット7+種**: RED STORM / CHROME ORBIT / DROP RAIN / STROBE PULSE / KALEIDO / NEON GRID / STARFIELD / MINIMAL（1クリックで背景・軌道・FXを一括セット）
+- **軌道8種**: 横(赤道) / 縦(極) / 斜め↗ / 斜め↘ / リング(緯度違い) / 螺旋 / 8の字 / 波打ち
+- **背景エフェクト6種**: グラデ / カオスドロップ降下 / スターフィールド / ネオングリッド / 放射パルス / トンネル
+- **FX**: 残像(エコー) / 色相回転 / ミラー / ストロボ / グロー / 拍動 / 周辺減光 / 極減光
+- **アクセント色**変更（黒×赤がデフォルト）
+- ロゴ1〜3を読み込み（透過PNG推奨）→ 調整 → **WebM書き出し**（1920×992・指定ループ秒・シームレス）→ 納品は **MP4/H.264へ変換**
+  - `ffmpeg -i sphere-vj_1920x992_8s.webm -c:v libx264 -pix_fmt yuv420p -movflags +faststart out.mp4`
+- すべての動き・エフェクトは**1ループでシームレス**になるよう位相ベースで設計（LEDの常時ループ前提）
 
 three.js は MIT License。

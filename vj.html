@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sphere VJ Studio — 球体LED VJジェネレーター</title>
+<style>
+  :root { --accent:#ee3333; }
+  html,body { margin:0; height:100%; background:#050505; overflow:hidden;
+    font-family:"Hiragino Sans","Noto Sans JP",sans-serif; color:#ddd; }
+  #app { position:fixed; inset:0; }
+  #flatWrap { position:fixed; inset:0; display:none; place-items:center; background:#000; z-index:1; }
+  #flatView { max-width:96vw; max-height:92vh; box-shadow:0 0 0 1px #333; }
+  .card { background:rgba(10,10,10,.9); border:1px solid #333; border-radius:10px; backdrop-filter:blur(6px); }
+  #panel { position:fixed; top:14px; left:14px; z-index:10; padding:13px 14px; width:308px;
+    max-height:calc(100vh - 28px); overflow:auto; }
+  #panel h1 { font-size:13px; margin:0 0 2px; letter-spacing:.06em; color:#fff; }
+  #panel .sub { font-size:10.5px; color:#888; margin-bottom:10px; }
+  .loadgrid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px; }
+  label.btn { display:block; text-align:center; cursor:pointer; background:#222; color:#ccc;
+    border:1px solid #444; border-radius:6px; padding:7px 0; font-size:11.5px; }
+  label.btn:hover { border-color:#777; }
+  label.btn.bg { grid-column:1 / -1; background:var(--accent); color:#fff; border:none; font-weight:600; }
+  label.btn.set { background:#1b3a1b; border-color:#2a5a2a; color:#cfc; }
+  .presets { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin:4px 0 2px; }
+  .presets button { background:#181818; color:#ddd; border:1px solid #3a3a3a; border-radius:6px; padding:6px 0; font-size:10.5px; cursor:pointer; letter-spacing:.03em; }
+  .presets button:hover { border-color:var(--accent); color:#fff; }
+  .orow { display:grid; grid-template-columns:auto 1fr; gap:6px; align-items:center; margin:5px 0; }
+  .orow span { font-size:11px; color:#aaa; }
+  select { background:#1a1a1a; color:#ddd; border:1px solid #444; border-radius:5px; padding:4px; font-size:11.5px; width:100%; }
+  .ctl { margin:7px 0; }
+  .ctl label { font-size:11px; color:#aaa; margin-bottom:3px; display:flex; justify-content:space-between; }
+  .ctl label span { color:#fff; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  input[type=file] { display:none; }
+  .row { display:flex; gap:6px; margin:8px 0; }
+  .row button { flex:1; background:#222; color:#ccc; border:1px solid #444; border-radius:6px; padding:7px 0; font-size:12px; cursor:pointer; }
+  .row button:hover { border-color:#777; } .row button.on { background:#444; color:#fff; border-color:#888; }
+  #export { background:var(--accent); color:#fff; border:none; font-weight:600; }
+  #status { font-size:11px; color:#9b9; margin-top:8px; min-height:1.4em; line-height:1.5; }
+  #status.rec { color:#f77; }
+  .divider { height:1px; background:#2a2a2a; margin:10px 0; }
+  .lbl { font-size:10.5px; color:#777; margin:6px 0 2px; display:flex; justify-content:space-between; align-items:center; }
+  .lbl input[type=color] { width:26px; height:18px; border:none; background:none; padding:0; cursor:pointer; }
+  #err { position:fixed; inset:0; display:none; place-items:center; z-index:20; background:#100; color:#f99; font-size:14px; padding:40px; text-align:center; line-height:1.8; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="flatWrap"><canvas id="flatView"></canvas></div>
+
+<div id="panel" class="card">
+  <h1>SPHERE VJ STUDIO</h1>
+  <div class="sub">球体LED 1920×992 ／ VJジェネレーター（軌道8種・背景6種・FX）</div>
+
+  <div class="lbl">プリセット（パターン）</div>
+  <div class="presets" id="presets"></div>
+
+  <div class="divider"></div>
+  <div class="loadgrid">
+    <label class="btn bg" for="fBg">背景画像/動画を読み込む（任意）</label>
+    <label class="btn" for="f0" id="l0">ロゴ 1</label>
+    <label class="btn" for="f1" id="l1">ロゴ 2</label>
+    <label class="btn" for="f2" id="l2">ロゴ 3</label>
+    <div></div>
+  </div>
+  <input id="fBg" type="file" accept="image/*">
+  <input id="f0" type="file" accept="image/*">
+  <input id="f1" type="file" accept="image/*">
+  <input id="f2" type="file" accept="image/*">
+
+  <div class="lbl">各ロゴの軌道</div>
+  <div class="orow"><span>ロゴ 1</span><select id="o0"></select></div>
+  <div class="orow"><span>ロゴ 2</span><select id="o1"></select></div>
+  <div class="orow"><span>ロゴ 3</span><select id="o2"></select></div>
+
+  <div class="divider"></div>
+  <div class="lbl">背景エフェクト</div>
+  <select id="bg" style="margin-bottom:6px">
+    <option value="gradient">グラデーション（標準）</option>
+    <option value="droprain">カオスドロップ降下</option>
+    <option value="starfield">スターフィールド</option>
+    <option value="grid">ネオングリッド</option>
+    <option value="radial">放射パルス</option>
+    <option value="tunnel">トンネル</option>
+  </select>
+
+  <div class="divider"></div>
+  <div class="ctl"><label>ロゴサイズ <span id="vSize"></span></label><input id="size" type="range" min="0.10" max="0.40" step="0.01" value="0.22"></div>
+  <div class="ctl"><label>周回速度（1ループの周回数）<span id="vSpeed"></span></label><input id="speed" type="range" min="1" max="4" step="1" value="1"></div>
+  <div class="ctl"><label>ループ長 <span id="vLoop"></span></label><input id="loop" type="range" min="4" max="16" step="1" value="8"></div>
+  <div class="ctl"><label>縦回数（螺旋/斜め）<span id="vVsw"></span></label><input id="vsweep" type="range" min="1" max="4" step="1" value="1"></div>
+  <div class="ctl"><label>軌道の散らし <span id="vSpread"></span></label><input id="spread" type="range" min="0" max="180" step="10" value="120"></div>
+  <div class="ctl"><label>拍動 <span id="vPulse"></span></label><input id="pulse" type="range" min="0" max="0.20" step="0.01" value="0.06"></div>
+  <div class="ctl"><label>グロー <span id="vGlow"></span></label><input id="glow" type="range" min="0" max="40" step="1" value="16"></div>
+  <div class="ctl"><label>残像（エコー）<span id="vEcho"></span></label><input id="echo" type="range" min="0" max="5" step="1" value="0"></div>
+  <div class="ctl"><label>色相回転 <span id="vCycle"></span></label><input id="cycle" type="range" min="0" max="3" step="1" value="0"></div>
+  <div class="ctl"><label>ストロボ <span id="vStrobe"></span></label><input id="strobe" type="range" min="0" max="12" step="1" value="0"></div>
+  <div class="ctl"><label>背景の流れ <span id="vBg"></span></label><input id="bgspd" type="range" min="0" max="3" step="1" value="1"></div>
+
+  <div class="lbl">アクセント色 <input id="accent" type="color" value="#ee3333"></div>
+
+  <div class="row">
+    <button id="play" class="on">再生中</button>
+    <button id="dir" class="on">順回り</button>
+  </div>
+  <div class="row">
+    <button id="mirror">ミラー</button>
+    <button id="vignette" class="on">周辺減光</button>
+    <button id="poles" class="on">極を暗く</button>
+  </div>
+  <div class="row">
+    <button id="view">表示：球</button>
+    <button id="guide">ガイド</button>
+  </div>
+  <div class="row"><button id="export">WebMで書き出し</button></div>
+  <div id="status">プリセットを押す or ロゴを読み込んでください</div>
+</div>
+
+<div id="err">three.js を読み込めませんでした。<b>vendor</b> フォルダを同じ場所に置いてください。</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script>
+(function () {
+  if (typeof THREE === 'undefined') { document.getElementById('err').style.display = 'grid'; return; }
+  var W = 1920, H = 992, TAU = Math.PI * 2, MAXWARP = 5;
+  var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  var ctx = cv.getContext('2d');
+
+  var ORBITS = [
+    ['h','横（赤道）'], ['v','縦（極を通る）'], ['d','斜め ↗'], ['d2','斜め ↘'],
+    ['ring','リング（緯度違い）'], ['helix','螺旋'], ['fig8','8の字'], ['wave','波打ち']
+  ];
+
+  var state = { size:0.22, speed:1, loop:8, vsweep:1, spread:120, pulse:0.06, glow:16,
+    echo:0, cycle:0, strobe:0, bgspd:1, bg:'gradient', accent:'#ee3333',
+    dir:1, playing:true, showFlat:false, guide:false, poles:true, mirror:false, vignette:true };
+  var bgImg = null, logos = [null, null, null], orbit = ['h', 'v', 'd'];
+
+  // ---- helpers ----
+  function hexRgb(h){ h=(h||'#ee3333').replace('#',''); if(h.length===3) h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2]; var n=parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+  function aRGBA(al){ var c=hexRgb(state.accent); return 'rgba('+c[0]+','+c[1]+','+c[2]+','+al+')'; }
+  function R(){ return Math.random(); }
+
+  // seamless particles (integer cycles per loop)
+  var drops=[]; for(var i=0;i<120;i++) drops.push({x:R(),y0:R(),sp:1+((R()*3)|0),len:24+R()*80,w:3+R()*7,a:0.4+R()*0.6,dx:(R()-0.5)*44});
+  var stars=[]; for(var i=0;i<170;i++) stars.push({x:R(),y:R(),r:0.6+R()*2.4,tw:1+((R()*3)|0),ph:R()});
+
+  function drawCover(img, shift) {
+    var s = Math.max(W / img.width, H / img.height);
+    var w = img.width * s, h = img.height * s, x0 = (W - w) / 2 + shift, y0 = (H - h) / 2;
+    for (var dx = -W; dx <= W; dx += W) ctx.drawImage(img, x0 + dx, y0, w, h);
+  }
+
+  // ---- backgrounds ----
+  function bgGradient() {
+    var c = hexRgb(state.accent);
+    ctx.fillStyle = '#050507'; ctx.fillRect(0, 0, W, H);
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, 'rgba('+c[0]+','+c[1]+','+c[2]+',0)');
+    g.addColorStop(0.5, 'rgba('+c[0]+','+c[1]+','+c[2]+',0.13)');
+    g.addColorStop(1, 'rgba('+c[0]+','+c[1]+','+c[2]+',0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  function bgDrop(p) { bgGradient(); ctx.save();
+    for (var i=0;i<drops.length;i++){ var d=drops[i];
+      var x=d.x*W + Math.sin(TAU*(p*d.sp))*d.dx;
+      var y=((((d.y0 + p*d.sp*Math.max(1,state.bgspd))%1)+1)%1)*(H*1.25)-H*0.12;
+      ctx.globalAlpha=d.a; ctx.fillStyle=aRGBA(0.95); ctx.shadowColor=aRGBA(0.9); ctx.shadowBlur=10;
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-d.w,y+d.len*0.4); ctx.lineTo(x,y+d.len); ctx.lineTo(x+d.w,y+d.len*0.4); ctx.closePath(); ctx.fill();
+    } ctx.restore(); ctx.shadowBlur=0; ctx.globalAlpha=1; }
+  function bgStars(p) { ctx.fillStyle='#040406'; ctx.fillRect(0,0,W,H); ctx.save();
+    for (var i=0;i<stars.length;i++){ var s=stars[i]; var a=0.25+0.75*(0.5+0.5*Math.sin(TAU*(p*s.tw+s.ph)));
+      ctx.globalAlpha=a; ctx.fillStyle=(i%7===0)?aRGBA(1):'#ffffff'; ctx.beginPath(); ctx.arc(s.x*W,s.y*H,s.r,0,TAU); ctx.fill(); }
+    ctx.restore(); ctx.globalAlpha=1; }
+  function bgGrid(p) { bgGradient(); ctx.save(); ctx.strokeStyle=aRGBA(0.5); ctx.lineWidth=2;
+    var sy=H/12, oy=((p*Math.max(1,state.bgspd))%1)*sy;
+    for (var y=-sy;y<H+sy;y+=sy){ ctx.beginPath(); ctx.moveTo(0,y+oy); ctx.lineTo(W,y+oy); ctx.stroke(); }
+    var sx=W/24, ox=((p*Math.max(1,state.bgspd))%1)*sx;
+    for (var x=-sx;x<W+sx;x+=sx){ ctx.beginPath(); ctx.moveTo(x+ox,0); ctx.lineTo(x+ox,H); ctx.stroke(); }
+    ctx.restore(); }
+  function bgRadial(p) { bgGradient(); ctx.save(); ctx.translate(W/2,H/2); ctx.lineWidth=4;
+    var rings=6, maxR=W*0.6;
+    for (var k=0;k<rings;k++){ var f=(((p*2 + k/rings)%1)+1)%1; ctx.globalAlpha=(1-f)*0.7; ctx.strokeStyle=aRGBA(1);
+      ctx.beginPath(); ctx.arc(0,0,f*maxR,0,TAU); ctx.stroke(); }
+    ctx.restore(); ctx.globalAlpha=1; }
+  function bgTunnel(p) { bgGradient(); ctx.save(); ctx.translate(W/2,H/2); ctx.lineWidth=3;
+    var rings=10, maxR=W*0.65;
+    for (var k=0;k<rings;k++){ var f=(((-p*2 + k/rings)%1)+1)%1; ctx.globalAlpha=f*0.6; ctx.strokeStyle=aRGBA(1);
+      ctx.beginPath(); ctx.arc(0,0,f*maxR+10,0,TAU); ctx.stroke(); }
+    ctx.restore(); ctx.globalAlpha=1; }
+  function drawBg(p) {
+    if (bgImg) { drawCover(bgImg, ((p*state.bgspd)%1)*W); return; }
+    switch (state.bg) {
+      case 'droprain': bgDrop(p); break;
+      case 'starfield': bgStars(p); break;
+      case 'grid': bgGrid(p); break;
+      case 'radial': bgRadial(p); break;
+      case 'tunnel': bgTunnel(p); break;
+      default: bgGradient();
+    }
+  }
+
+  // ---- orbits ----
+  function orbitPos(type, node, theta) {
+    var inc = type === 'v' ? Math.PI / 2 : 0;
+    var x = Math.sin(theta), z = Math.cos(theta);
+    var y1 = -z * Math.sin(inc), z1 = z * Math.cos(inc), x1 = x;
+    var xr = x1 * Math.cos(node) + z1 * Math.sin(node);
+    var zr = -x1 * Math.sin(node) + z1 * Math.cos(node);
+    return { lon: Math.atan2(xr, zr), lat: Math.asin(Math.max(-1, Math.min(1, y1))) };
+  }
+  function pathPos(type, k, n, p) {
+    var phase = n > 1 ? k / n : 0, spreadRad = state.spread * Math.PI / 180, s = state.dir * state.speed;
+    if (type === 'h' || type === 'v') { var node = phase * spreadRad, theta = TAU * ((p * s) + phase); var pos = orbitPos(type, node, theta); return { u: 0.5 + pos.lon / TAU, lat: pos.lat }; }
+    if (type === 'd' || type === 'd2') { var u = phase + p * s, vs = type === 'd' ? -1 : 1, lf = ((phase + p * state.vsweep * vs) % 1 + 1) % 1; return { u: u, lat: (0.5 - lf) * Math.PI }; }
+    if (type === 'ring') { return { u: phase + p * s, lat: (phase - 0.5) * Math.PI * 0.7 }; }
+    if (type === 'helix') { return { u: phase + p * s, lat: Math.sin(TAU * (p * state.vsweep + phase)) * Math.PI * 0.45 }; }
+    if (type === 'fig8') { var a = TAU * (p * s + phase); return { u: 0.5 + Math.sin(a) * 0.5, lat: Math.sin(2 * a) * Math.PI * 0.4 }; }
+    if (type === 'wave') { var uu = phase + p * s; return { u: uu, lat: Math.sin(TAU * (uu * 2)) * Math.PI * 0.18 }; }
+    return { u: 0.5, lat: 0 };
+  }
+  function drawLogoU(img, u, lat, baseH) {
+    u = (u % 1 + 1) % 1;
+    var xpx = u * W, ypx = (0.5 - lat / Math.PI) * H, warp = 1 / Math.max(Math.cos(lat), 1 / MAXWARP);
+    var h = baseH, w = baseH * img.width / img.height * warp;
+    for (var dx = -W; dx <= W; dx += W) ctx.drawImage(img, xpx + dx - w / 2, ypx - h / 2, w, h);
+  }
+  function present() { var a = []; for (var i = 0; i < 3; i++) if (logos[i]) a.push(i); return a; }
+
+  function drawLogos(p) {
+    var pr = present(), n = pr.length; ctx.save();
+    for (var idx = 0; idx < n; idx++) {
+      var i = pr[idx], img = logos[i], type = orbit[i];
+      var sc = 1 + state.pulse * Math.sin(TAU * (2 * p) + idx * 1.7), baseH = state.size * H * sc;
+      ctx.shadowColor = aRGBA(0.9); ctx.shadowBlur = state.glow;
+      var echo = state.echo | 0;
+      for (var j = echo; j >= 0; j--) {
+        var pp = (((p - j * 0.03) % 1) + 1) % 1, pos = pathPos(type, idx, n, pp);
+        ctx.globalAlpha = j === 0 ? 1 : (1 - j / (echo + 1)) * 0.45;
+        if (state.cycle) ctx.filter = 'hue-rotate(' + (((p * 360 * state.cycle) + idx * 70) % 360) + 'deg)';
+        drawLogoU(img, pos.u, pos.lat, baseH);
+        if (state.mirror) drawLogoU(img, pos.u + 0.5, -pos.lat, baseH);
+        ctx.filter = 'none'; ctx.globalAlpha = 1;
+      }
+    }
+    ctx.restore(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+  }
+
+  function strobe(p) { if (state.strobe <= 0) return; if (Math.floor(p * state.strobe * 2) % 2 === 1) { ctx.globalAlpha = 0.32; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; } }
+  function drawPoles() { if (!state.poles) return;
+    var t = ctx.createLinearGradient(0, 0, 0, H * 0.22); t.addColorStop(0, 'rgba(0,0,0,0.85)'); t.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = t; ctx.fillRect(0, 0, W, H * 0.22);
+    var b = ctx.createLinearGradient(0, H, 0, H * 0.78); b.addColorStop(0, 'rgba(0,0,0,0.85)'); b.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = b; ctx.fillRect(0, H * 0.78, W, H * 0.22); }
+  function drawVignette() { if (!state.vignette) return;
+    var g = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, W * 0.62);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.45)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  function drawGuide() {
+    ctx.strokeStyle = 'rgba(85,119,204,0.7)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(204,51,51,0.8)';
+    ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.setLineDash([14, 14]);
+    ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(2, H); ctx.moveTo(W - 2, 0); ctx.lineTo(W - 2, H); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = '34px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('FRONT', W / 2, 44); ctx.fillText('BACK 継ぎ目', 150, H / 2 - 16); ctx.fillText('BACK 継ぎ目', W - 150, H / 2 - 16);
+  }
+
+  function render(p) {
+    ctx.clearRect(0, 0, W, H);
+    drawBg(p); drawLogos(p); strobe(p); drawPoles(); drawVignette();
+    if (state.guide && !recording) drawGuide();
+    tex.needsUpdate = true;
+    if (state.showFlat) { fctx.clearRect(0, 0, fv.width, fv.height); fctx.drawImage(cv, 0, 0, fv.width, fv.height); }
+  }
+
+  // ---- three.js sphere ----
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  document.getElementById('app').appendChild(renderer.domElement);
+  var scene = new THREE.Scene(); scene.background = new THREE.Color(0x050505);
+  var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+  camera.position.set(0, 0.4, 3.4);
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.minDistance = 1.4; controls.maxDistance = 8;
+  var tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding;
+  var sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), new THREE.MeshBasicMaterial({ map: tex }));
+  sphere.rotation.y = -Math.PI / 2; scene.add(sphere);
+  var floor = new THREE.Mesh(new THREE.CircleGeometry(2.2, 64), new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.6 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -1.35; scene.add(floor);
+  var fv = document.getElementById('flatView'); fv.width = W; fv.height = H; var fctx = fv.getContext('2d');
+
+  // ---- clock ----
+  var p = 0, last = performance.now(), recording = false, recStart = 0;
+  function tick(now) {
+    var dt = (now - last) / 1000; last = now;
+    if (recording) { p = (now - recStart) / 1000 / state.loop; if (p >= 1) { p = 0.9999; finishRecord(); } }
+    else if (state.playing) { p = (p + dt / state.loop) % 1; }
+    render(p); controls.update();
+    if (!state.showFlat) renderer.render(scene, camera);
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // ---- build selects ----
+  function fillSelect(sel, val) { for (var i = 0; i < ORBITS.length; i++) { var o = document.createElement('option'); o.value = ORBITS[i][0]; o.textContent = ORBITS[i][1]; if (ORBITS[i][0] === val) o.selected = true; sel.appendChild(o); } }
+  [0, 1, 2].forEach(function (i) { fillSelect(document.getElementById('o' + i), orbit[i]); });
+
+  // ---- file loading ----
+  var status = document.getElementById('status');
+  function loadFile(file, cb) { var img = new Image(); img.onload = function () { cb(img); }; img.src = URL.createObjectURL(file); }
+  function setLogoBtn(i) { var el = document.getElementById('l' + i); el.classList.toggle('set', !!logos[i]); el.textContent = logos[i] ? '✓ ロゴ ' + (i + 1) : 'ロゴ ' + (i + 1); updateStatus(); }
+  function updateStatus() { var n = present().length; status.textContent = (bgImg ? '背景○ ' : '背景:' + state.bg + ' ') + 'ロゴ ' + n + '枚' + (n ? ' — 周回中' : '（未読込）'); }
+  [0, 1, 2].forEach(function (i) {
+    document.getElementById('f' + i).addEventListener('change', function (e) { if (e.target.files[0]) loadFile(e.target.files[0], function (img) { logos[i] = img; setLogoBtn(i); }); });
+    document.getElementById('o' + i).addEventListener('change', function (e) { orbit[i] = e.target.value; });
+  });
+  document.getElementById('fBg').addEventListener('change', function (e) { if (e.target.files[0]) loadFile(e.target.files[0], function (img) { bgImg = img; updateStatus(); }); });
+  window.__loadLogoURL = function (i, url) { var im = new Image(); im.crossOrigin = 'anonymous'; im.onload = function () { logos[i] = im; setLogoBtn(i); }; im.src = url; };
+  window.__loadBgURL = function (url) { var im = new Image(); im.crossOrigin = 'anonymous'; im.onload = function () { bgImg = im; updateStatus(); }; im.src = url; };
+
+  // ---- sliders ----
+  var FMT = {
+    size: function (v) { return Math.round(v * 100) + '%'; }, speed: function (v) { return v + ' 周/ループ'; },
+    loop: function (v) { return v + ' 秒'; }, vsweep: function (v) { return v + ' 回'; }, spread: function (v) { return v + '°'; },
+    pulse: function (v) { return Math.round(v * 100) + '%'; }, glow: function (v) { return v + ' px'; },
+    echo: function (v) { return v ? v + ' 重' : 'なし'; }, cycle: function (v) { return v ? '×' + v : 'なし'; },
+    strobe: function (v) { return v ? v + ' 回/ループ' : 'なし'; }, bgspd: function (v) { return v; }
+  };
+  var SLID = { size: 'vSize', speed: 'vSpeed', loop: 'vLoop', vsweep: 'vVsw', spread: 'vSpread', pulse: 'vPulse', glow: 'vGlow', echo: 'vEcho', cycle: 'vCycle', strobe: 'vStrobe', bgspd: 'vBg' };
+  Object.keys(SLID).forEach(function (key) {
+    var el = document.getElementById(key), out = document.getElementById(SLID[key]);
+    function up() { state[key] = parseFloat(el.value); out.textContent = FMT[key](state[key]); }
+    el.addEventListener('input', up); up();
+  });
+  document.getElementById('bg').addEventListener('change', function (e) { state.bg = e.target.value; updateStatus(); });
+  document.getElementById('accent').addEventListener('input', function (e) { state.accent = e.target.value; document.documentElement.style.setProperty('--accent', e.target.value); });
+
+  // ---- toggles ----
+  function toggle(id, key, onTxt, offTxt) { var b = document.getElementById(id); b.addEventListener('click', function () { state[key] = !state[key]; b.classList.toggle('on', state[key]); if (onTxt) b.textContent = state[key] ? onTxt : offTxt; }); }
+  var playBtn = document.getElementById('play'); playBtn.addEventListener('click', function () { state.playing = !state.playing; playBtn.classList.toggle('on', state.playing); playBtn.textContent = state.playing ? '再生中' : '停止中'; });
+  var dirBtn = document.getElementById('dir'); dirBtn.addEventListener('click', function () { state.dir *= -1; var r = state.dir > 0; dirBtn.classList.toggle('on', r); dirBtn.textContent = r ? '順回り' : '逆回り'; });
+  var viewBtn = document.getElementById('view'), flatWrap = document.getElementById('flatWrap');
+  viewBtn.addEventListener('click', function () { state.showFlat = !state.showFlat; flatWrap.style.display = state.showFlat ? 'grid' : 'none'; viewBtn.textContent = state.showFlat ? '表示：平面' : '表示：球'; });
+  toggle('mirror', 'mirror'); toggle('vignette', 'vignette'); toggle('poles', 'poles');
+  document.getElementById('guide').addEventListener('click', function () { var b = this; state.guide = !state.guide; b.classList.toggle('on', state.guide); });
+
+  // ---- presets ----
+  var PRESETS = {
+    'RED STORM':   { bg:'droprain', accent:'#ee2222', glow:24, echo:2, mirror:false, cycle:0, strobe:0, vignette:true, orbit:['d','d2','helix'], speed:2, pulse:0.09, bgspd:2, size:0.22 },
+    'CHROME ORBIT':{ bg:'gradient', accent:'#ff3344', glow:14, echo:0, mirror:true,  cycle:0, strobe:0, vignette:true, orbit:['h','ring','v'],   speed:1, pulse:0.05, bgspd:1, size:0.24 },
+    'DROP RAIN':   { bg:'droprain', accent:'#ff2a2a', glow:18, echo:0, mirror:false, cycle:0, strobe:0, vignette:true, orbit:['h','h','h'],     speed:1, pulse:0.04, bgspd:3, size:0.2 },
+    'STROBE PULSE':{ bg:'radial',   accent:'#ff0033', glow:28, echo:1, mirror:false, cycle:0, strobe:8, vignette:true, orbit:['fig8','fig8','v'],speed:2, pulse:0.13, bgspd:1, size:0.24 },
+    'KALEIDO':     { bg:'tunnel',   accent:'#ff4455', glow:18, echo:1, mirror:true,  cycle:1, strobe:0, vignette:true, orbit:['helix','fig8','wave'],speed:2, pulse:0.06, bgspd:1, size:0.22 },
+    'NEON GRID':   { bg:'grid',     accent:'#ff2266', glow:14, echo:0, mirror:false, cycle:0, strobe:0, vignette:true, orbit:['wave','h','ring'],speed:1, pulse:0.05, bgspd:1, size:0.22 },
+    'STARFIELD':   { bg:'starfield',accent:'#ffffff', glow:16, echo:0, mirror:false, cycle:0, strobe:0, vignette:true, orbit:['h','v','d'],      speed:1, pulse:0.05, bgspd:1, size:0.22 },
+    'MINIMAL':     { bg:'gradient', accent:'#ee3333', glow:10, echo:0, mirror:false, cycle:0, strobe:0, vignette:false,orbit:['h','v','d'],      speed:1, pulse:0.04, bgspd:1, size:0.22 }
+  };
+  function syncUI() {
+    Object.keys(SLID).forEach(function (key) { var el = document.getElementById(key); if (el) { el.value = state[key]; document.getElementById(SLID[key]).textContent = FMT[key](state[key]); } });
+    document.getElementById('bg').value = state.bg;
+    document.getElementById('accent').value = state.accent; document.documentElement.style.setProperty('--accent', state.accent);
+    for (var i = 0; i < 3; i++) document.getElementById('o' + i).value = orbit[i];
+    [['mirror', 'mirror'], ['vignette', 'vignette'], ['poles', 'poles']].forEach(function (t) { document.getElementById(t[0]).classList.toggle('on', state[t[1]]); });
+    updateStatus();
+  }
+  function applyPreset(name) { var ps = PRESETS[name]; if (!ps) return; for (var key in ps) { if (key === 'orbit') { orbit = ps.orbit.slice(); } else { state[key] = ps[key]; } } syncUI(); status.textContent = 'プリセット: ' + name; }
+  var pwrap = document.getElementById('presets');
+  Object.keys(PRESETS).forEach(function (name) { var b = document.createElement('button'); b.textContent = name; b.addEventListener('click', function () { applyPreset(name); }); pwrap.appendChild(b); });
+
+  // ---- export ----
+  var rec = null, chunks = [];
+  function pickMime() { var c = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']; for (var i = 0; i < c.length; i++) if (window.MediaRecorder && MediaRecorder.isTypeSupported(c[i])) return c[i]; return ''; }
+  document.getElementById('export').addEventListener('click', function () {
+    if (recording) return;
+    if (!present().length) { status.textContent = '先にロゴを読み込んでください'; return; }
+    var mime = pickMime(); if (!mime) { status.textContent = 'この環境はWebM書き出し非対応です'; return; }
+    var stream = cv.captureStream(30);
+    rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12000000 });
+    chunks = []; rec.ondataavailable = function (e) { if (e.data.size) chunks.push(e.data); };
+    rec.onstop = function () {
+      var blob = new Blob(chunks, { type: 'video/webm' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = 'sphere-vj_1920x992_' + state.loop + 's.webm'; a.click();
+      status.textContent = '書き出し完了（WebM）。納品はMP4/H.264へ変換してください'; status.classList.remove('rec');
+    };
+    recording = true; recStart = performance.now(); p = 0;
+    status.textContent = '● 録画中… ' + state.loop + '秒（1ループ）'; status.classList.add('rec'); rec.start();
+  });
+  function finishRecord() { recording = false; if (rec && rec.state !== 'inactive') rec.stop(); last = performance.now(); }
+
+  window.addEventListener('resize', function () { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+  updateStatus();
+})();
+</script>
+</body>
+</html>

@@ -36,7 +36,7 @@
   .row { display:flex; gap:6px; margin:8px 0; }
   .row button { flex:1; background:#222; color:#ccc; border:1px solid #444; border-radius:6px; padding:7px 0; font-size:12px; cursor:pointer; }
   .row button:hover { border-color:#777; } .row button.on { background:#444; color:#fff; border-color:#888; }
-  #export { background:var(--accent); color:#fff; border:none; font-weight:600; }
+  #exportmp4 { background:var(--accent); color:#fff; border:none; font-weight:600; }
   #status { font-size:11px; color:#9b9; margin-top:8px; min-height:1.4em; line-height:1.5; }
   #status.rec { color:#f77; }
   .divider { height:1px; background:#2a2a2a; margin:10px 0; }
@@ -116,6 +116,7 @@
     <button id="view">表示：球</button>
     <button id="guide">ガイド</button>
   </div>
+  <div class="row"><button id="exportmp4">MP4で書き出し（高画質・30fps・完全ループ）</button></div>
   <div class="row"><button id="export">WebMで書き出し</button></div>
   <div id="status">プリセットを押す or ロゴを読み込んでください</div>
 </div>
@@ -124,6 +125,7 @@
 
 <script src="vendor/three.min.js"></script>
 <script src="vendor/OrbitControls.js"></script>
+<script src="vendor/mp4-muxer.min.js"></script>
 <script>
 (function () {
   if (typeof THREE === 'undefined') { document.getElementById('err').style.display = 'grid'; return; }
@@ -347,6 +349,37 @@
     rec.onstop=function(){ var blob=new Blob(chunks,{type:'video/webm'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='sphere-vj_1920x992_'+state.loop+'s.webm'; a.click(); status.textContent='書き出し完了（WebM）。納品はMP4/H.264へ変換してください'; status.classList.remove('rec'); };
     recording=true; recStart=performance.now(); p=0; status.textContent='● 録画中… '+state.loop+'秒（1ループ）'; status.classList.add('rec'); rec.start(); });
   function finishRecord(){ recording=false; if(rec && rec.state!=='inactive') rec.stop(); last=performance.now(); }
+
+  // ---- MP4 export (WebCodecs + mp4-muxer：決定論・完全ループ・ffmpeg/サーバー不要) ----
+  async function exportMP4(){
+    if(recording) return;
+    if(!present().length){ status.textContent='先にロゴを読み込んでください'; return; }
+    if(typeof VideoEncoder==='undefined' || typeof Mp4Muxer==='undefined'){ status.textContent='この環境はMP4直書き出し非対応です。WebMをご利用ください'; return; }
+    var fps=30, N=Math.round(state.loop*fps);
+    var cfg={ codec:'avc1.640029', width:W, height:H, bitrate:10000000, framerate:fps };
+    try {
+      var sup=await VideoEncoder.isConfigSupported(cfg);
+      if(!sup.supported){ cfg.codec='avc1.4D4029'; sup=await VideoEncoder.isConfigSupported(cfg); }
+      if(!sup.supported){ cfg.codec='avc1.42E029'; sup=await VideoEncoder.isConfigSupported(cfg); }
+      if(!sup.supported){ status.textContent='H.264エンコード非対応の環境です。WebMをご利用ください'; return; }
+      var muxer=new Mp4Muxer.Muxer({ target:new Mp4Muxer.ArrayBufferTarget(), video:{ codec:'avc', width:W, height:H }, fastStart:'in-memory' });
+      var enc=new VideoEncoder({ output:function(chunk,meta){ muxer.addVideoChunk(chunk,meta); }, error:function(e){ status.textContent='MP4エンコードエラー: '+e.message; status.classList.remove('rec'); } });
+      enc.configure(cfg);
+      var was=state.playing; state.playing=false; recording=true; status.classList.add('rec');
+      for(var i=0;i<N;i++){
+        render(i/N);
+        var vf=new VideoFrame(cv, { timestamp:Math.round(i*1e6/fps), duration:Math.round(1e6/fps) });
+        enc.encode(vf, { keyFrame: i%fps===0 }); vf.close();
+        if(i%6===0){ status.textContent='● MP4 書き出し中… '+Math.round(i/N*100)+'%'; await new Promise(function(r){ setTimeout(r, enc.encodeQueueSize>8?20:0); }); }
+      }
+      await enc.flush(); muxer.finalize();
+      var blob=new Blob([muxer.target.buffer], { type:'video/mp4' });
+      var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='sphere-vj_1920x992_'+state.loop+'s_30fps.mp4'; a.click();
+      recording=false; state.playing=was; last=performance.now();
+      status.textContent='MP4 書き出し完了（H.264 / 30fps / 完全ループ）'; status.classList.remove('rec');
+    } catch(err){ recording=false; status.textContent='MP4書き出し失敗: '+err.message+'（WebMをお試しください）'; status.classList.remove('rec'); }
+  }
+  document.getElementById('exportmp4').addEventListener('click', exportMP4);
 
   window.addEventListener('resize',function(){ camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth,window.innerHeight); });
   updateStatus();
